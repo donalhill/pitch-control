@@ -728,7 +728,7 @@ def plot_time_integrated_obso(
     ]
     ax.legend(handles=legend_elements, loc='upper right', frameon=True,
               facecolor='#2a2a4e', edgecolor='white', labelcolor='white',
-              framealpha=0.9, fontsize=9)
+              framealpha=0.9, fontsize=9, bbox_to_anchor=(1.0, 1.15))
 
     # Title with score and OBSO (as decimal values) - white for dark background
     title = f"Away vs Home\n{away_goals} ({away_total_obso:.2f}) - {home_goals} ({home_total_obso:.2f})"
