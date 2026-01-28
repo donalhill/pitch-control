@@ -403,7 +403,7 @@ def create_event_browser_row():
         # Controls (left)
         dbc.Col([
             dbc.Card([
-                dbc.CardHeader("Top 10 OBSO Passes", className="card-header-custom"),
+                dbc.CardHeader("Top 10 OBSO Events", className="card-header-custom"),
                 dbc.CardBody([
                     # Team selector
                     html.Label("Team", className="control-label"),
