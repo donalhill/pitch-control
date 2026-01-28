@@ -726,7 +726,7 @@ def plot_time_integrated_obso(
                markersize=10, markeredgewidth=2, markerfacecolor='white',
                markeredgecolor='#000004', label='Goal'),
     ]
-    ax.legend(handles=legend_elements, loc='lower right', frameon=True,
+    ax.legend(handles=legend_elements, loc='upper right', frameon=True,
               facecolor='#2a2a4e', edgecolor='white', labelcolor='white',
               framealpha=0.9, fontsize=9)
 
