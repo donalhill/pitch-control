@@ -733,88 +733,14 @@ def select_event(n_clicks_list, ids):
     prevent_initial_call=False,
 )
 def update_event_visualization(slim_idx, team_filter):
-    """Update 2x2 OBSO decomposition visualization (Spearman Figure 5 style)."""
+    """Serve pre-rendered OBSO decomposition image."""
     if DATA is None or slim_idx is None:
         return "", ""
 
-    # Get pre-computed surfaces from slim format (already for attacking team)
-    pitch_control = DATA['top_pitch_control'][slim_idx]
-    obso = DATA['top_obso'][slim_idx]
-    obso_total = DATA['top_obso_totals'][slim_idx]
+    # Serve pre-rendered image (instant!)
+    pitch_img = str(DATA['top_event_images'][slim_idx])
 
-    # Determine attacking team from event
-    event_team = str(DATA['top_event_teams'][slim_idx])
-    attacking_team = "home" if "home" in event_team.lower() else "away"
-
-    # EPV based on attacking team
-    scoring = DATA['epv_home'] if attacking_team == 'home' else DATA['epv_away']
-
-    grid = DATA['grid']
-    ball_pos = DATA['top_ball_positions'][slim_idx]
-
-    # Compute Transition probability T(r) on-the-fly
-    SIGMA = 23.9
-    ALPHA = 1.04
-
-    if not np.isnan(ball_pos).any():
-        dist_sq = (grid[..., 0] - ball_pos[0])**2 + (grid[..., 1] - ball_pos[1])**2
-        gaussian = np.exp(-dist_sq / (2 * SIGMA**2))
-        transition = gaussian * (pitch_control ** ALPHA)
-        transition_sum = transition.sum()
-        if transition_sum > 0:
-            transition = transition / transition_sum
-    else:
-        transition = np.zeros_like(pitch_control)
-
-    # Get positions and velocities
-    home_pos = DATA['top_home_positions'][slim_idx]
-    away_pos = DATA['top_away_positions'][slim_idx]
-    valid_home = ~np.isnan(home_pos[:, 0])
-    valid_away = ~np.isnan(away_pos[:, 0])
-    home_pos = home_pos[valid_home]
-    away_pos = away_pos[valid_away]
-
-    # Get velocities
-    home_vel = DATA['top_home_velocities'][slim_idx][valid_home]
-    away_vel = DATA['top_away_velocities'][slim_idx][valid_away]
-    # Compute max velocity across top events for consistent scaling
-    all_home_vel = DATA['top_home_velocities']
-    all_away_vel = DATA['top_away_velocities']
-    home_speeds = np.sqrt(all_home_vel[..., 0]**2 + all_home_vel[..., 1]**2)
-    away_speeds = np.sqrt(all_away_vel[..., 0]**2 + all_away_vel[..., 1]**2)
-    max_velocity = max(np.nanmax(home_speeds), np.nanmax(away_speeds), 1.0)
-
-    home_jerseys = list(DATA['home_jerseys'][:len(home_pos)])
-    away_jerseys = list(DATA['away_jerseys'][:len(away_pos)])
-
-    event_type = str(DATA['top_event_types'][slim_idx])
     frame = int(DATA['top_frame_indices'][slim_idx])
-    time = DATA['top_times'][slim_idx]
-    period = int(DATA['top_periods'][slim_idx])
-
-    event_info = f"{event_type} by {event_team} | {format_period(period)}, {format_time(time)}"
-
-    fig = plot_obso_decomposition(
-        scoring=scoring,
-        pitch_control=pitch_control,
-        transition=transition,
-        obso=obso,
-        grid=grid,
-        home_positions=home_pos,
-        away_positions=away_pos,
-        ball_position=ball_pos,
-        home_velocities=home_vel,
-        away_velocities=away_vel,
-        home_jerseys=home_jerseys,
-        away_jerseys=away_jerseys,
-        obso_total=float(obso_total),
-        event_info=event_info,
-        attacking_team=attacking_team,
-        max_velocity=max_velocity,
-        figsize=(14, 10),
-    )
-
-    pitch_img = fig_to_base64(fig, dpi=100)
 
     return pitch_img, f"Frame {frame}"
 

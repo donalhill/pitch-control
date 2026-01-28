@@ -5,14 +5,24 @@ Export slim precomputed data for web deployment.
 Only includes:
 - Time series data (all events' OBSO totals)
 - Integrated OBSO heatmaps
-- Top 10 OBSO events per team with full decomposition data
+- Top 10 OBSO events per team with pre-rendered images
 """
 
 import argparse
+import io
 import sys
 from pathlib import Path
 
+# Set matplotlib backend before importing
+import matplotlib
+matplotlib.use('Agg')
+
 import numpy as np
+
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from pitch_control.viz.pitch import plot_obso_decomposition, fig_to_base64
 
 def export_slim(game_id: int, n_top: int = 10) -> Path:
     """
@@ -130,6 +140,110 @@ def export_slim(game_id: int, n_top: int = 10) -> Path:
     home_gk = data['home_gk']
     away_gk = data['away_gk']
 
+    # === PRE-RENDER IMAGES FOR TOP EVENTS ===
+    print("Pre-rendering decomposition images...")
+
+    # Compute max velocity for consistent arrow scaling
+    all_home_vel = top_home_velocities
+    all_away_vel = top_away_velocities
+    home_speeds = np.sqrt(all_home_vel[..., 0]**2 + all_home_vel[..., 1]**2)
+    away_speeds = np.sqrt(all_away_vel[..., 0]**2 + all_away_vel[..., 1]**2)
+    max_velocity = max(np.nanmax(home_speeds), np.nanmax(away_speeds), 1.0)
+
+    # Spearman parameters for transition computation
+    SIGMA = 23.9
+    ALPHA = 1.04
+
+    # Store images as base64 strings
+    top_event_images = []
+
+    for i in range(n_top_events):
+        # Get data for this event
+        pitch_control = top_pitch_control[i]
+        obso = top_obso[i]
+        obso_total = top_obso_totals[i]
+        ball_pos = top_ball_positions[i]
+
+        # Determine attacking team
+        event_team = str(top_event_teams[i])
+        attacking_team = "home" if "home" in event_team.lower() else "away"
+        scoring = epv_home if attacking_team == 'home' else epv_away
+
+        # Compute transition probability
+        if not np.isnan(ball_pos).any():
+            dist_sq = (grid[..., 0] - ball_pos[0])**2 + (grid[..., 1] - ball_pos[1])**2
+            gaussian = np.exp(-dist_sq / (2 * SIGMA**2))
+            transition = gaussian * (pitch_control ** ALPHA)
+            transition_sum = transition.sum()
+            if transition_sum > 0:
+                transition = transition / transition_sum
+        else:
+            transition = np.zeros_like(pitch_control)
+
+        # Get player positions and velocities
+        home_pos = top_home_positions[i]
+        away_pos = top_away_positions[i]
+        valid_home = ~np.isnan(home_pos[:, 0])
+        valid_away = ~np.isnan(away_pos[:, 0])
+        home_pos = home_pos[valid_home]
+        away_pos = away_pos[valid_away]
+
+        home_vel = top_home_velocities[i][valid_home]
+        away_vel = top_away_velocities[i][valid_away]
+
+        home_jerseys_list = list(home_jerseys[:len(home_pos)])
+        away_jerseys_list = list(away_jerseys[:len(away_pos)])
+
+        # Format event info
+        event_type = str(top_event_types[i])
+        time_val = top_times[i]
+        period = int(top_periods[i])
+
+        # Format time
+        mins = int(time_val // 60) + 1
+        if mins % 10 == 1 and mins != 11:
+            suffix = "st"
+        elif mins % 10 == 2 and mins != 12:
+            suffix = "nd"
+        elif mins % 10 == 3 and mins != 13:
+            suffix = "rd"
+        else:
+            suffix = "th"
+        time_str = f"{mins}{suffix} minute"
+        period_str = "First Half" if period == 1 else "Second Half"
+
+        event_info = f"{event_type} by {event_team} | {period_str}, {time_str}"
+
+        # Generate figure
+        fig = plot_obso_decomposition(
+            scoring=scoring,
+            pitch_control=pitch_control,
+            transition=transition,
+            obso=obso,
+            grid=grid,
+            home_positions=home_pos,
+            away_positions=away_pos,
+            ball_position=ball_pos,
+            home_velocities=home_vel,
+            away_velocities=away_vel,
+            home_jerseys=home_jerseys_list,
+            away_jerseys=away_jerseys_list,
+            obso_total=float(obso_total),
+            event_info=event_info,
+            attacking_team=attacking_team,
+            max_velocity=max_velocity,
+            figsize=(14, 10),
+        )
+
+        # Convert to base64
+        img_base64 = fig_to_base64(fig, dpi=120)
+        top_event_images.append(img_base64)
+
+        print(f"  Rendered event {i+1}/{n_top_events}")
+
+    # Convert to numpy array of strings
+    top_event_images = np.array(top_event_images, dtype=object)
+
     # === SAVE SLIM FILE ===
     output_path = data_dir / f"game_{game_id}_slim.npz"
 
@@ -189,6 +303,9 @@ def export_slim(game_id: int, n_top: int = 10) -> Path:
         away_gk=away_gk,
         game_id=np.int32(game_id),
         n_top=np.int32(n_top),
+
+        # Pre-rendered images (base64 PNG strings)
+        top_event_images=top_event_images,
     )
 
     # Report sizes
