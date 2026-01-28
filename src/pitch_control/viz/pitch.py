@@ -472,7 +472,7 @@ def plot_cumulative_obso_timeline(
     obso_away: np.ndarray,
     goal_times_home: list[float] = None,
     goal_times_away: list[float] = None,
-    figsize: tuple = (12, 6),
+    figsize: tuple = (12, 7),
 ) -> plt.Figure:
     """
     Plot cumulative OBSO over time for both teams with momentum subplot.
@@ -523,7 +523,7 @@ def plot_cumulative_obso_timeline(
                               edgecolors=COLORS['away'], linewidths=2, zorder=5,
                               label='Away Goal' if gt == goal_times_away[0] else None)
 
-    ax_cum.set_ylabel('Integrated Scoring Opportunity', fontsize=10)
+    ax_cum.set_ylabel('Cumulative OBSO', fontsize=10)
     ax_cum.legend(loc='upper left', frameon=True, fontsize=9)
     ax_cum.spines['top'].set_visible(False)
     ax_cum.spines['right'].set_visible(False)
