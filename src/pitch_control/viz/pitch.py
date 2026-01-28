@@ -559,6 +559,7 @@ def plot_cumulative_obso_timeline(
     ax_mom.set_xticks(np.arange(0, max_time + 1, tick_interval))
 
     fig.tight_layout()
+    fig.subplots_adjust(hspace=0.3)  # Add vertical space between subplots
     return fig
 
 
