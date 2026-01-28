@@ -554,9 +554,10 @@ app.layout = html.Div([
                                className="text-secondary mb-0", style={'fontSize': '0.85rem'}),
                     ], md=6),
                     dbc.Col([
-                        html.Strong("Heatmap", style={'color': '#2563EB'}),
-                        html.P("Time-integrated OBSO surface. Shows which areas of the pitch generated the most attacking threat across all events.",
-                               className="text-secondary mb-0", style={'fontSize': '0.85rem'}),
+                        html.Strong("Spatial Distribution", style={'color': '#2563EB'}),
+                        html.P([
+                            "Where each team created dangerous space. Contours show the regions containing the top 10%, 25%, and 50% of each team's attacking threat.",
+                        ], className="text-secondary mb-0", style={'fontSize': '0.85rem'}),
                     ], md=6),
                 ]),
             ]),

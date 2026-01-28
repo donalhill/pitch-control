@@ -633,13 +633,26 @@ def plot_time_integrated_obso(
     # Transform extent from centered coords (-52.5 to 52.5) to mplsoccer coords (0 to 105)
     extent = [0, 105, 0, 68]
 
-    # Normalize both surfaces to sum to their respective totals
-    home_norm = obso_home_sum / (obso_home_sum.sum() + 1e-10) * home_total_obso
-    away_norm = obso_away_sum / (obso_away_sum.sum() + 1e-10) * away_total_obso
+    # Normalize both surfaces to sum to 1 (probability distributions)
+    home_norm = obso_home_sum / (obso_home_sum.sum() + 1e-10)
+    away_norm = obso_away_sum / (obso_away_sum.sum() + 1e-10)
 
-    # Compute sigma separately for each team's distribution
-    sigma_home = np.std(home_norm)
-    sigma_away = np.std(away_norm)
+    # Find percentile thresholds: value where top X% of probability mass lies above
+    # Percentiles to show: 10%, 25%, 50% of dangerous space (tighter focus)
+    percentiles = [0.10, 0.25, 0.50]
+
+    def get_percentile_threshold(surface, pct):
+        """Find threshold where top pct of total mass is above threshold."""
+        flat = surface.flatten()
+        sorted_vals = np.sort(flat)[::-1]  # Sort descending
+        cumsum = np.cumsum(sorted_vals)
+        idx = np.searchsorted(cumsum, pct)
+        if idx < len(sorted_vals):
+            return sorted_vals[idx]
+        return sorted_vals[-1]
+
+    home_thresholds = [get_percentile_threshold(home_norm, p) for p in percentiles]
+    away_thresholds = [get_percentile_threshold(away_norm, p) for p in percentiles]
 
     # Combined: home - away (positive = home, negative = away)
     combined = home_norm - away_norm
@@ -649,25 +662,26 @@ def plot_time_integrated_obso(
     y = np.linspace(0, 68, combined.shape[0])
     X, Y = np.meshgrid(x, y)
 
-    # Sigma-based contour levels using each team's own sigma
-    # Positive levels (home): 2σ, 3σ of home distribution
-    # Negative levels (away): -2σ, -3σ of away distribution
-    home_levels = np.array([2, 3]) * sigma_home
-    away_levels = -np.array([2, 3]) * sigma_away
+    # Percentile-based contour levels
+    # Home thresholds are positive, away thresholds are negative
+    home_levels = home_thresholds  # 25%, 50%, 75% thresholds
+    away_levels = [-t for t in away_thresholds]  # Negative for away
 
     # Combine and sort levels, add outer bounds
-    max_val = max(abs(combined.min()), abs(combined.max()), 4 * max(sigma_home, sigma_away))
-    sigma_levels = np.sort(np.concatenate([away_levels, home_levels]))
-    levels = np.sort(np.concatenate([[-max_val], sigma_levels, [max_val]]))
+    max_val = max(abs(combined.min()), abs(combined.max())) * 1.1
+    pct_levels = np.sort(home_levels + away_levels)
+    levels = np.sort(np.concatenate([[-max_val], pct_levels, [max_val]]))
 
-    # Colors matching COLORS['home'] and COLORS['away'] for consistency
-    # Bands: [-max,-3σ], [-3σ,-2σ], [-2σ,+2σ], [+2σ,+3σ], [+3σ,max]
+    # Colors: 7 bands for 6 threshold levels
+    # [-max, -50%], [-50%, -25%], [-25%, -10%], [-10%, +10%], [+10%, +25%], [+25%, +50%], [+50%, max]
     band_colors = [
-        COLORS['away'],  # bright blue (away 3σ+)
-        '#2d4a5e',       # muted blue (away 2-3σ)
+        COLORS['away'],  # brightest blue (away top 25%)
+        '#3a6a8a',       # medium blue (away 25-50%)
+        '#2d4a5e',       # muted blue (away 50-75%)
         '#000004',       # dark background (central region)
-        '#8b2d35',       # muted red (home 2-3σ)
-        COLORS['home'],  # bright red (home 3σ+)
+        '#6b2028',       # muted red (home 50-75%)
+        '#a33540',       # medium red (home 25-50%)
+        COLORS['home'],  # brightest red (home top 25%)
     ]
 
     im = ax.contourf(
@@ -679,10 +693,10 @@ def plot_time_integrated_obso(
         zorder=2,
     )
 
-    # Add contour lines at sigma boundaries for clarity
+    # Add contour lines at percentile boundaries for clarity
     ax.contour(
         X, Y, combined,
-        levels=sigma_levels,
+        levels=pct_levels,
         colors='white',
         linewidths=0.5,
         alpha=0.4,
