@@ -662,7 +662,7 @@ def update_match_summary(game_id):
         away_goal_positions=np.array(away_goal_pos) if away_goal_pos else None,
         figsize=(8, 5),
     )
-    heatmap_img = fig_to_base64(fig_heatmap, dpi=100)
+    heatmap_img = fig_to_base64(fig_heatmap, dpi=100, bg_color='#000004')
 
     return timeline_img, heatmap_img
 
