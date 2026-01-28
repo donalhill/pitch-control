@@ -472,12 +472,12 @@ def plot_cumulative_obso_timeline(
     obso_away: np.ndarray,
     goal_times_home: list[float] = None,
     goal_times_away: list[float] = None,
-    figsize: tuple = (12, 4),
+    figsize: tuple = (12, 6),
 ) -> plt.Figure:
     """
-    Plot cumulative OBSO over time for both teams.
+    Plot cumulative OBSO over time for both teams with momentum subplot.
 
-    Like Spearman's "Integrated Scoring Opportunity" plot.
+    Like Spearman's "Integrated Scoring Opportunity" plot with residuals.
 
     Args:
         times: Event times in seconds
@@ -486,7 +486,10 @@ def plot_cumulative_obso_timeline(
         goal_times_home: Times of home team goals (for markers)
         goal_times_away: Times of away team goals (for markers)
     """
-    fig, ax = plt.subplots(figsize=figsize)
+    # Create figure with two subplots - cumulative on top, momentum below
+    fig, (ax_cum, ax_mom) = plt.subplots(
+        2, 1, figsize=figsize, height_ratios=[3, 1], sharex=True
+    )
 
     # Convert times to minutes
     times_min = times / 60.0
@@ -495,20 +498,20 @@ def plot_cumulative_obso_timeline(
     cum_home = np.cumsum(obso_home)
     cum_away = np.cumsum(obso_away)
 
-    # Plot cumulative lines
-    ax.plot(times_min, cum_home, color=COLORS['home'], linewidth=2, label='Home')
-    ax.plot(times_min, cum_away, color=COLORS['away'], linewidth=2, label='Away')
+    # === TOP SUBPLOT: Cumulative OBSO ===
+    ax_cum.plot(times_min, cum_home, color=COLORS['home'], linewidth=2, label='Home')
+    ax_cum.plot(times_min, cum_away, color=COLORS['away'], linewidth=2, label='Away')
 
     # Add goal markers (open circles)
     if goal_times_home:
         for gt in goal_times_home:
             gt_min = gt / 60.0
-            # Find cumulative OBSO at goal time
             idx = np.searchsorted(times_min, gt_min)
             if idx > 0 and idx <= len(cum_home):
                 y_val = cum_home[min(idx, len(cum_home)-1)]
-                ax.scatter([gt_min], [y_val], s=100, facecolors='none',
-                          edgecolors=COLORS['home'], linewidths=2, zorder=5)
+                ax_cum.scatter([gt_min], [y_val], s=100, facecolors='none',
+                              edgecolors=COLORS['home'], linewidths=2, zorder=5,
+                              label='Home Goal' if gt == goal_times_home[0] else None)
 
     if goal_times_away:
         for gt in goal_times_away:
@@ -516,23 +519,44 @@ def plot_cumulative_obso_timeline(
             idx = np.searchsorted(times_min, gt_min)
             if idx > 0 and idx <= len(cum_away):
                 y_val = cum_away[min(idx, len(cum_away)-1)]
-                ax.scatter([gt_min], [y_val], s=100, facecolors='none',
-                          edgecolors=COLORS['away'], linewidths=2, zorder=5)
+                ax_cum.scatter([gt_min], [y_val], s=100, facecolors='none',
+                              edgecolors=COLORS['away'], linewidths=2, zorder=5,
+                              label='Away Goal' if gt == goal_times_away[0] else None)
 
-    ax.set_xlabel('Time (minutes)', fontsize=11)
-    ax.set_ylabel('Integrated Scoring Opportunity', fontsize=11)
-    ax.legend(loc='upper left', frameon=True)
+    ax_cum.set_ylabel('Integrated Scoring Opportunity', fontsize=10)
+    ax_cum.legend(loc='upper left', frameon=True, fontsize=9)
+    ax_cum.spines['top'].set_visible(False)
+    ax_cum.spines['right'].set_visible(False)
+    ax_cum.set_ylim(0, None)
 
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
+    # === BOTTOM SUBPLOT: Momentum (instantaneous OBSO) ===
+    # Home OBSO positive, Away OBSO negative
+    bar_width = 0.3  # Width in minutes
 
+    # Plot home bars (positive)
+    ax_mom.bar(times_min, obso_home, width=bar_width, color=COLORS['home'],
+               alpha=0.8, align='center')
+    # Plot away bars (negative)
+    ax_mom.bar(times_min, -obso_away, width=bar_width, color=COLORS['away'],
+               alpha=0.8, align='center')
+
+    # Zero line
+    ax_mom.axhline(y=0, color='black', linewidth=0.5, linestyle='--', alpha=0.5)
+
+    ax_mom.set_xlabel('Time (minutes)', fontsize=10)
+    ax_mom.set_ylabel('Away(-) / Home(+)', fontsize=9)
+    ax_mom.spines['top'].set_visible(False)
+    ax_mom.spines['right'].set_visible(False)
+
+    # Set symmetric y limits for momentum plot
+    max_obso = max(obso_home.max(), obso_away.max()) if len(obso_home) > 0 else 0.1
+    ax_mom.set_ylim(-max_obso * 1.1, max_obso * 1.1)
+
+    # X-axis settings (shared)
     max_time = max(times_min) if len(times_min) > 0 else 100
-    ax.set_xlim(0, max_time)
-    ax.set_ylim(0, None)
-
-    # More x-axis tick labels (every 5 minutes)
+    ax_mom.set_xlim(0, max_time)
     tick_interval = 5
-    ax.set_xticks(np.arange(0, max_time + 1, tick_interval))
+    ax_mom.set_xticks(np.arange(0, max_time + 1, tick_interval))
 
     fig.tight_layout()
     return fig
