@@ -26,10 +26,10 @@ python -m app.main
 
 ## Features
 
-- Vectorized pitch control computation with Numba JIT acceleration
+- Vectorised pitch control computation with Numba JIT acceleration
 - Interactive Dash web app for browsing match events
 - Pre-computed analysis for Metrica Sports sample data
-- OBSO decomposition visualizations
+- OBSO decomposition visualisations
 
 ## References
 
