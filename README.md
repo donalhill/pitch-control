@@ -11,18 +11,18 @@ This project answers: **"Which attacking positions create the most valuable scor
 - **Pitch Control**: Probability field showing which team can reach each pitch location first
 - **OBSO**: Combines pass transition, ball control, and scoring probability to quantify attacking threat
 
-## Quick Start
+## Demo
+
+**[Try it live](https://pitch-control.onrender.com/)**
+
+Or run locally:
 
 ```bash
 git clone https://github.com/donalhill/pitch-control.git
 cd pitch-control
 pip install -e .
-
-# Run the web app
 python -m app.main
 ```
-
-Open http://localhost:8050 to explore match events interactively.
 
 ## Features
 
