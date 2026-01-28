@@ -526,8 +526,13 @@ def plot_cumulative_obso_timeline(
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
 
-    ax.set_xlim(0, max(times_min) if len(times_min) > 0 else 100)
+    max_time = max(times_min) if len(times_min) > 0 else 100
+    ax.set_xlim(0, max_time)
     ax.set_ylim(0, None)
+
+    # More x-axis tick labels (every 5 minutes)
+    tick_interval = 5
+    ax.set_xticks(np.arange(0, max_time + 1, tick_interval))
 
     fig.tight_layout()
     return fig
@@ -567,7 +572,33 @@ def plot_time_integrated_obso(
         home_goal_positions: (n, 2) array of home goal positions (centered coords)
         away_goal_positions: (n, 2) array of away goal positions (centered coords)
     """
-    fig, ax = plot_pitch(figsize=figsize)
+    # Dark pitch background to match decomposition plots
+    fig, ax = plt.subplots(figsize=figsize)
+    fig.patch.set_facecolor('#000004')
+    ax.set_facecolor('#000004')
+
+    # Draw pitch with white lines on dark background
+    if HAS_MPLSOCCER:
+        pitch = Pitch(
+            pitch_type='custom',
+            pitch_length=105,
+            pitch_width=68,
+            pitch_color='#000004',
+            line_color='white',
+            linewidth=1.5,
+            goal_type='box',
+        )
+        pitch.draw(ax=ax)
+    else:
+        ax.set_xlim(0, 105)
+        ax.set_ylim(0, 68)
+        ax.set_aspect('equal')
+
+    # Hide axes spines (but keep pitch markings)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.set_xticks([])
+    ax.set_yticks([])
 
     # Transform extent from centered coords (-52.5 to 52.5) to mplsoccer coords (0 to 105)
     extent = [0, 105, 0, 68]
@@ -599,15 +630,14 @@ def plot_time_integrated_obso(
     sigma_levels = np.sort(np.concatenate([away_levels, home_levels]))
     levels = np.sort(np.concatenate([[-max_val], sigma_levels, [max_val]]))
 
-    # Explicitly set colors for each band:
+    # Colors matching COLORS['home'] and COLORS['away'] for consistency
     # Bands: [-max,-3σ], [-3σ,-2σ], [-2σ,+2σ], [+2σ,+3σ], [+3σ,max]
-    # Colors: dark blue, light blue, WHITE, light red, dark red
     band_colors = [
-        '#1a5276',  # dark blue (away 3σ+)
-        '#7fb3d5',  # light blue (away 2-3σ)
-        '#FFFFFF',  # white (central region - no significant advantage)
-        '#f5b7b1',  # light red (home 2-3σ)
-        '#c0392b',  # dark red (home 3σ+) - cleaner red, not brownish
+        COLORS['away'],  # bright blue (away 3σ+)
+        '#2d4a5e',       # muted blue (away 2-3σ)
+        '#000004',       # dark background (central region)
+        '#8b2d35',       # muted red (home 2-3σ)
+        COLORS['home'],  # bright red (home 3σ+)
     ]
 
     im = ax.contourf(
@@ -623,48 +653,56 @@ def plot_time_integrated_obso(
     ax.contour(
         X, Y, combined,
         levels=sigma_levels,
-        colors='black',
+        colors='white',
         linewidths=0.5,
-        alpha=0.5,
+        alpha=0.4,
         zorder=3,
     )
 
-    # Plot shots (x) and goals (o) - black for both teams, high zorder
+    # Re-draw pitch boundary lines on top to ensure uniform appearance
+    # (mplsoccer lines can get obscured by contourf at edges)
+    ax.plot([0, 105], [0, 0], color='white', linewidth=1.5, zorder=100)  # bottom
+    ax.plot([0, 105], [68, 68], color='white', linewidth=1.5, zorder=100)  # top
+    ax.plot([0, 0], [0, 68], color='white', linewidth=1.5, zorder=100)  # left
+    ax.plot([105, 105], [0, 68], color='white', linewidth=1.5, zorder=100)  # right
+
+    # Plot shots (x) and goals (o) - white for dark background
     if home_shot_positions is not None and len(home_shot_positions) > 0:
         pos = _transform_coords(home_shot_positions)
-        ax.scatter(pos[:, 0], pos[:, 1], marker='x', s=40, c='black',
+        ax.scatter(pos[:, 0], pos[:, 1], marker='x', s=40, c='white',
                    linewidths=1.5, zorder=100)
 
     if away_shot_positions is not None and len(away_shot_positions) > 0:
         pos = _transform_coords(away_shot_positions)
-        ax.scatter(pos[:, 0], pos[:, 1], marker='x', s=40, c='black',
+        ax.scatter(pos[:, 0], pos[:, 1], marker='x', s=40, c='white',
                    linewidths=1.5, zorder=100)
 
     if home_goal_positions is not None and len(home_goal_positions) > 0:
         pos = _transform_coords(home_goal_positions)
-        ax.scatter(pos[:, 0], pos[:, 1], marker='o', s=80, c='black',
-                   edgecolors='white', linewidths=1.5, zorder=101)
+        ax.scatter(pos[:, 0], pos[:, 1], marker='o', s=80, c='white',
+                   edgecolors='#000004', linewidths=1.5, zorder=101)
 
     if away_goal_positions is not None and len(away_goal_positions) > 0:
         pos = _transform_coords(away_goal_positions)
-        ax.scatter(pos[:, 0], pos[:, 1], marker='o', s=80, c='black',
-                   edgecolors='white', linewidths=1.5, zorder=101)
+        ax.scatter(pos[:, 0], pos[:, 1], marker='o', s=80, c='white',
+                   edgecolors='#000004', linewidths=1.5, zorder=101)
 
     # Add legend for shot/goal markers
     from matplotlib.lines import Line2D
     legend_elements = [
-        Line2D([0], [0], marker='x', color='black', linestyle='None',
+        Line2D([0], [0], marker='x', color='white', linestyle='None',
                markersize=8, markeredgewidth=2, label='Shot'),
-        Line2D([0], [0], marker='o', color='black', linestyle='None',
-               markersize=10, markeredgewidth=2, markerfacecolor='black',
-               markeredgecolor='white', label='Goal'),
+        Line2D([0], [0], marker='o', color='white', linestyle='None',
+               markersize=10, markeredgewidth=2, markerfacecolor='white',
+               markeredgecolor='#000004', label='Goal'),
     ]
     ax.legend(handles=legend_elements, loc='lower right', frameon=True,
+              facecolor='#2a2a4e', edgecolor='white', labelcolor='white',
               framealpha=0.9, fontsize=9)
 
-    # Title with score and OBSO (as decimal values)
+    # Title with score and OBSO (as decimal values) - white for dark background
     title = f"Away vs Home\n{away_goals} ({away_total_obso:.2f}) - {home_goals} ({home_total_obso:.2f})"
-    ax.set_title(title, fontsize=14, fontweight='bold', pad=10)
+    ax.set_title(title, fontsize=14, fontweight='bold', pad=10, color='white')
 
     fig.tight_layout()
     return fig, ax
@@ -719,18 +757,10 @@ def plot_obso_decomposition(
     away_pos = _transform_coords(away_positions) if away_positions is not None else None
     ball_pos = _transform_coords(ball_position) if ball_position is not None else None
 
-    # Team-specific colormap (red for home, blue for away)
-    if attacking_team == "home":
-        cmap = LinearSegmentedColormap.from_list(
-            'home_cmap', ['#FFFFFF', '#FFCCCC', '#FF6666', '#CC0000', '#660000'], N=256
-        )
-    else:
-        cmap = LinearSegmentedColormap.from_list(
-            'away_cmap', ['#FFFFFF', '#CCE5FF', '#66B2FF', '#0066CC', '#003366'], N=256
-        )
-
-    # Pitch background color matches colormap minimum (white)
-    pitch_bg_color = '#FFFFFF'
+    # Perceptually uniform magma colormap - dark = low, bright = high
+    # Same for both home and away (no team colors on heatmaps)
+    cmap = plt.cm.magma
+    pitch_bg_color = '#000004'  # Dark background to match colormap minimum
 
     # Apply power transform to transition to boost mid-range visibility
     # (transition has concentrated peak near ball, rest is near zero)
@@ -753,7 +783,7 @@ def plot_obso_decomposition(
                 pitch_length=105,
                 pitch_width=68,
                 pitch_color=pitch_bg_color,
-                line_color='black',
+                line_color='white',
                 linewidth=1.5,
                 goal_type='box',
             )
@@ -761,9 +791,9 @@ def plot_obso_decomposition(
         else:
             # Fallback manual drawing
             ax.set_facecolor(pitch_bg_color)
-            ax.plot([0, 105, 105, 0, 0], [0, 0, 68, 68, 0], 'k-', lw=1.5)
-            ax.plot([52.5, 52.5], [0, 68], 'k-', lw=1)
-            circle = plt.Circle((52.5, 34), 9.15, fill=False, color='k', lw=1)
+            ax.plot([0, 105, 105, 0, 0], [0, 0, 68, 68, 0], 'w-', lw=1.5)
+            ax.plot([52.5, 52.5], [0, 68], 'w-', lw=1)
+            circle = plt.Circle((52.5, 34), 9.15, fill=False, color='w', lw=1)
             ax.add_patch(circle)
             ax.set_xlim(-4, 109)
             ax.set_ylim(-4, 72)
@@ -825,7 +855,7 @@ def plot_obso_decomposition(
                             start_y = pos[1] + dy * CIRCLE_RADIUS
                             ax.annotate('', xy=(start_x + dx * arrow_len, start_y + dy * arrow_len),
                                         xytext=(start_x, start_y),
-                                        arrowprops=dict(arrowstyle='->', color='black',
+                                        arrowprops=dict(arrowstyle='->', color='white',
                                                         lw=0.8, mutation_scale=8),
                                         zorder=9)
 
@@ -855,7 +885,7 @@ def plot_obso_decomposition(
                             start_y = pos[1] + dy * CIRCLE_RADIUS
                             ax.annotate('', xy=(start_x + dx * arrow_len, start_y + dy * arrow_len),
                                         xytext=(start_x, start_y),
-                                        arrowprops=dict(arrowstyle='->', color='black',
+                                        arrowprops=dict(arrowstyle='->', color='white',
                                                         lw=0.8, mutation_scale=8),
                                         zorder=9)
 
@@ -869,9 +899,12 @@ def plot_obso_decomposition(
                 verticalalignment='top', fontweight='bold',
                 bbox=dict(boxstyle='square,pad=0.3', facecolor='white', edgecolor='black', alpha=0.9))
 
-    # Main title
+    # Main title (white text for dark background)
     if event_info:
-        fig.suptitle(event_info, fontsize=12, fontweight='bold', y=0.98)
+        fig.suptitle(event_info, fontsize=12, fontweight='bold', y=0.98, color='white')
+
+    # Dark figure background to match pitch
+    fig.patch.set_facecolor('#000004')
 
     # Use subplots_adjust instead of tight_layout to prevent goal clipping
     fig.subplots_adjust(left=0.02, right=0.98, top=0.92, bottom=0.02, wspace=0.05, hspace=0.1)

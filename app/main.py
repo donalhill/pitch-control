@@ -323,7 +323,7 @@ app = Dash(
     suppress_callback_exceptions=True,
 )
 
-app.title = "Pitch Control Analysis"
+app.title = "Off-Ball Scoring Opportunity Analysis"
 
 app.index_string = f'''
 <!DOCTYPE html>
@@ -357,7 +357,7 @@ def create_hero_section():
     """Create the hero header."""
     return html.Div([
         dbc.Container([
-            html.H1("Pitch Control Analysis", className="hero-title text-center"),
+            html.H1("Off-Ball Scoring Opportunity Analysis", className="hero-title text-center"),
             html.Div([
                 html.Span("Metrica Sports Open Data", className="hero-badge"),
                 html.Span("Spearman (2018) OBSO Model", className="hero-badge"),
@@ -525,12 +525,12 @@ app.layout = html.Div([
                     ], md=4),
                     dbc.Col([
                         html.Strong("Arrows", style={'color': '#2563EB'}),
-                        html.P("Black arrows show player velocity - direction of movement and speed. Longer arrows mean faster movement.",
+                        html.P("White arrows show player velocity - direction of movement and speed. Longer arrows mean faster movement.",
                                className="text-secondary mb-0", style={'fontSize': '0.85rem'}),
                     ], md=4),
                     dbc.Col([
                         html.Strong("Heatmaps", style={'color': '#2563EB'}),
-                        html.P("Intensity shows probability. Darker/brighter areas have higher values. Red heatmaps = home attacking, blue = away attacking.",
+                        html.P("Dark areas = low probability. Bright hotspots = high probability. Same colormap for both teams.",
                                className="text-secondary mb-0", style={'fontSize': '0.85rem'}),
                     ], md=4),
                 ]),
@@ -671,8 +671,9 @@ def update_match_summary(game_id):
     Output('event-list', 'children'),
     Input('game-dropdown', 'value'),
     Input('team-dropdown', 'value'),
+    Input('selected-event-idx', 'data'),
 )
-def update_event_list(game_id, team):
+def update_event_list(game_id, team, selected_idx):
     """Generate clickable list of top 10 OBSO events for selected team."""
     global DATA, CURRENT_GAME
 
@@ -700,11 +701,15 @@ def update_event_list(game_id, team):
         period = int(DATA['top_periods'][slim_idx])
         event_type = str(DATA['top_event_types'][slim_idx])
 
-        # Add goal/miss indicator for shots
-        event_label = event_type
+        # Normalize capitalization and add goal/miss indicator for shots
+        event_label = event_type.title()  # "PASS" -> "Pass", "SHOT" -> "Shot"
         if event_type.upper() == 'SHOT' and 'top_is_goal' in DATA:
             is_goal = DATA['top_is_goal'][slim_idx]
             event_label = "Shot (Goal)" if is_goal else "Shot (Miss)"
+
+        # Highlight selected event
+        is_selected = selected_idx == slim_idx
+        class_name = "event-list-item selected" if is_selected else "event-list-item"
 
         item = html.Div([
             html.Span(f"#{rank}", className="event-rank"),
@@ -712,7 +717,7 @@ def update_event_list(game_id, team):
             html.Span(f" ({event_label})", className="event-type-label", style={'fontSize': '0.75rem', 'color': '#64748B'}),
             html.Br(),
             html.Span(f"{format_period(period)}, {format_time(time)}", className="event-time"),
-        ], className="event-list-item", id={'type': 'event-item', 'index': slim_idx})
+        ], className=class_name, id={'type': 'event-item', 'index': slim_idx})
         items.append(item)
 
     return items
@@ -746,9 +751,21 @@ def update_event_visualization(slim_idx, team_filter):
     # Serve pre-rendered image (instant!)
     pitch_img = str(DATA['top_event_images'][slim_idx])
 
-    frame = int(DATA['top_frame_indices'][slim_idx])
+    # Build event info string
+    event_type = str(DATA['top_event_types'][slim_idx]).title()
+    event_team = str(DATA['top_event_teams'][slim_idx]).title()
+    time_val = DATA['top_times'][slim_idx]
+    period = int(DATA['top_periods'][slim_idx])
+    obso_val = DATA['top_obso_totals'][slim_idx]
 
-    return pitch_img, f"Frame {frame}"
+    # Add goal/miss for shots
+    if event_type.upper() == 'SHOT' and 'top_is_goal' in DATA:
+        is_goal = DATA['top_is_goal'][slim_idx]
+        event_type = "Shot (Goal)" if is_goal else "Shot (Miss)"
+
+    event_info = f"{event_type} by {event_team} | {format_period(period)}, {format_time(time_val)} | OBSO: {obso_val * 100:.2f}%"
+
+    return pitch_img, event_info
 
 
 # =============================================================================
