@@ -1,6 +1,6 @@
 # Pitch Control & OBSO Analysis
 
-A football analytics platform implementing Spearman's Pitch Control model and Off-Ball Scoring Opportunity (OBSO) analysis with an interactive web interface.
+An implementation of Spearman's Pitch Control and Off-Ball Scoring Opportunity (OBSO) models, applied to Metrica Sports' open-source 25 Hz tracking data with synchronised event annotations.
 
 ![OBSO Decomposition](output/pitch_control_example.png)
 
