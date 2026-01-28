@@ -700,10 +700,16 @@ def update_event_list(game_id, team):
         period = int(DATA['top_periods'][slim_idx])
         event_type = str(DATA['top_event_types'][slim_idx])
 
+        # Add goal/miss indicator for shots
+        event_label = event_type
+        if event_type.upper() == 'SHOT' and 'top_is_goal' in DATA:
+            is_goal = DATA['top_is_goal'][slim_idx]
+            event_label = "Shot (Goal)" if is_goal else "Shot (Miss)"
+
         item = html.Div([
             html.Span(f"#{rank}", className="event-rank"),
             html.Span(f"OBSO: {obso_val * 100:.2f}%", className="event-obso"),
-            html.Span(f" ({event_type})", className="event-type-label", style={'fontSize': '0.75rem', 'color': '#64748B'}),
+            html.Span(f" ({event_label})", className="event-type-label", style={'fontSize': '0.75rem', 'color': '#64748B'}),
             html.Br(),
             html.Span(f"{format_period(period)}, {format_time(time)}", className="event-time"),
         ], className="event-list-item", id={'type': 'event-item', 'index': slim_idx})

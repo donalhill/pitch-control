@@ -107,6 +107,19 @@ def export_slim(game_id: int, n_top: int = 10) -> Path:
     top_periods = periods[top_indices]
     top_ball_positions = data['ball_positions'][top_indices]
 
+    # Determine if shots are goals by matching to goal times
+    top_is_goal = np.zeros(n_top_events, dtype=bool)
+    for i, idx in enumerate(top_indices):
+        event_type = str(event_types[idx]).upper()
+        if event_type == 'SHOT':
+            event_time = times[idx]
+            event_team = str(event_teams[idx]).lower()
+            goal_times_list = goal_times_home if 'home' in event_team else goal_times_away
+            for gt in goal_times_list:
+                if abs(event_time - gt) < 0.5:  # Within 0.5 seconds
+                    top_is_goal[i] = True
+                    break
+
     # Player positions and velocities for top events
     top_home_positions = data['home_positions'][top_indices]
     top_away_positions = data['away_positions'][top_indices]
@@ -212,7 +225,12 @@ def export_slim(game_id: int, n_top: int = 10) -> Path:
         time_str = f"{mins}{suffix} minute"
         period_str = "First Half" if period == 1 else "Second Half"
 
-        event_info = f"{event_type} by {event_team} | {period_str}, {time_str}"
+        # Add goal/miss indicator for shots
+        event_label = event_type
+        if event_type.upper() == 'SHOT':
+            event_label = "SHOT (Goal)" if top_is_goal[i] else "SHOT (Miss)"
+
+        event_info = f"{event_label} by {event_team} | {period_str}, {time_str}"
 
         # Generate figure
         fig = plot_obso_decomposition(
@@ -279,6 +297,7 @@ def export_slim(game_id: int, n_top: int = 10) -> Path:
         top_frame_indices=top_frame_indices.astype(np.int32),
         top_event_types=top_event_types,
         top_event_teams=top_event_teams,
+        top_is_goal=top_is_goal,
         top_event_start_x=top_event_start_x.astype(np.float32),
         top_event_start_y=top_event_start_y.astype(np.float32),
         top_times=top_times.astype(np.float32),
