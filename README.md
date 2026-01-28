@@ -2,7 +2,7 @@
 
 A football analytics platform implementing Spearman's Pitch Control model and Off-Ball Scoring Opportunity (OBSO) analysis. Built with vectorized NumPy computations, Numba JIT acceleration, and an interactive Dash web interface.
 
-![Pitch Control Visualization](output/test_pitch_control.png)
+![OBSO Decomposition](output/pitch_control_example.png)
 
 ## Overview
 
@@ -36,8 +36,6 @@ It combines physics-based player movement modeling with expected possession valu
 - Cumulative OBSO timeline with goal markers
 - Spatial distribution heatmaps with percentile contours
 - Pre-rendered images for instant loading
-
-![Colormap Comparison](output/colormap_comparison.png)
 
 ## Installation
 
