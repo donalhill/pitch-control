@@ -529,15 +529,21 @@ def plot_cumulative_obso_timeline(
     ax_cum.spines['right'].set_visible(False)
     ax_cum.set_ylim(0, None)
 
-    # === BOTTOM SUBPLOT: Momentum (instantaneous OBSO) ===
-    # Home OBSO positive, Away OBSO negative
-    bar_width = 0.3  # Width in minutes
+    # === BOTTOM SUBPLOT: Momentum (binned OBSO) ===
+    # Bin OBSO values into 1-minute intervals
+    bin_width = 1.0  # minutes
+    max_time = max(times_min) if len(times_min) > 0 else 100
+    bins = np.arange(0, max_time + bin_width, bin_width)
+    bin_centers = bins[:-1] + bin_width / 2
 
-    # Plot home bars (positive)
-    ax_mom.bar(times_min, obso_home, width=bar_width, color=COLORS['home'],
+    # Sum OBSO within each bin
+    home_binned, _ = np.histogram(times_min, bins=bins, weights=obso_home)
+    away_binned, _ = np.histogram(times_min, bins=bins, weights=obso_away)
+
+    # Plot home bars (positive) and away bars (negative)
+    ax_mom.bar(bin_centers, home_binned, width=bin_width * 0.9, color=COLORS['home'],
                alpha=0.8, align='center')
-    # Plot away bars (negative)
-    ax_mom.bar(times_min, -obso_away, width=bar_width, color=COLORS['away'],
+    ax_mom.bar(bin_centers, -away_binned, width=bin_width * 0.9, color=COLORS['away'],
                alpha=0.8, align='center')
 
     # Zero line
@@ -549,11 +555,10 @@ def plot_cumulative_obso_timeline(
     ax_mom.spines['right'].set_visible(False)
 
     # Set symmetric y limits for momentum plot
-    max_obso = max(obso_home.max(), obso_away.max()) if len(obso_home) > 0 else 0.1
-    ax_mom.set_ylim(-max_obso * 1.1, max_obso * 1.1)
+    max_binned = max(home_binned.max(), away_binned.max()) if len(home_binned) > 0 else 0.1
+    ax_mom.set_ylim(-max_binned * 1.1, max_binned * 1.1)
 
     # X-axis settings (shared)
-    max_time = max(times_min) if len(times_min) > 0 else 100
     ax_mom.set_xlim(0, max_time)
     tick_interval = 5
     ax_mom.set_xticks(np.arange(0, max_time + 1, tick_interval))
