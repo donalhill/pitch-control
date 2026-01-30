@@ -152,6 +152,8 @@ def compute_ball_travel_time(
     """
     Compute time for ball to travel from current position to each target.
 
+    Simple model: constant ball speed (no drag).
+
     Returns:
         Array of shape (n_grid_y, n_grid_x) with travel times in seconds
     """
@@ -164,6 +166,52 @@ def compute_ball_travel_time(
     distances = np.sqrt(np.sum(diff**2, axis=-1))
 
     return distances / ball_speed
+
+
+def compute_ball_travel_time_with_trajectory(
+    ball_position: np.ndarray,  # (2,)
+    target_positions: np.ndarray,  # (n_grid_y, n_grid_x, 2)
+    attacker_arrival_times: np.ndarray,  # (n_grid_y, n_grid_x) - min attacker time
+    ball_flight_model=None,
+) -> np.ndarray:
+    """
+    Compute ball travel time using realistic trajectory model.
+
+    Following Spearman's approach: select the ball trajectory where flight time
+    most closely matches the nearest attacker's arrival time.
+
+    Args:
+        ball_position: Current ball position (2,)
+        target_positions: Grid of target positions (n_grid_y, n_grid_x, 2)
+        attacker_arrival_times: Fastest attacker arrival at each grid point
+        ball_flight_model: BallFlightModel instance (lazy loaded if None)
+
+    Returns:
+        Array of shape (n_grid_y, n_grid_x) with travel times in seconds
+    """
+    if np.isnan(ball_position).any():
+        return np.zeros(target_positions.shape[:2])
+
+    # Lazy load the ball flight model
+    if ball_flight_model is None:
+        from pitch_control.models.ball_trajectory import get_ball_flight_model
+        ball_flight_model = get_ball_flight_model()
+
+    # Distance from ball to each grid point
+    diff = target_positions - ball_position
+    distances = np.sqrt(np.sum(diff**2, axis=-1))
+
+    # Get flight time range for each distance and match to attacker arrival
+    n_grid_y, n_grid_x = distances.shape
+    ball_times = np.zeros_like(distances)
+
+    for iy in range(n_grid_y):
+        for ix in range(n_grid_x):
+            dist = distances[iy, ix]
+            att_time = attacker_arrival_times[iy, ix]
+            ball_times[iy, ix] = ball_flight_model.get_matched_flight_time(dist, att_time)
+
+    return ball_times
 
 
 def compute_time_to_intercept(
@@ -410,6 +458,8 @@ def compute_pitch_control(
     grid: np.ndarray | None = None,
     check_offsides: bool = True,
     attack_direction: int = 1,
+    use_ball_trajectory: bool = False,
+    ball_flight_model=None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Compute pitch control surface for the attacking team.
@@ -426,6 +476,10 @@ def compute_pitch_control(
         grid: Pre-computed grid (or None to create one)
         check_offsides: Whether to exclude offside players
         attack_direction: +1 if attacking right, -1 if attacking left
+        use_ball_trajectory: If True, use realistic ball trajectory model with
+            aerodynamic drag (Asai & Seo 2013) and match flight time to attacker
+            arrival (Spearman 2018). If False, use simple constant speed model.
+        ball_flight_model: Pre-loaded BallFlightModel (lazy loads if None)
 
     Returns:
         Tuple of:
@@ -489,9 +543,6 @@ def compute_pitch_control(
     # All defenders are "onside" by definition
     is_onside = np.concatenate([att_onside, np.ones(n_def, dtype=bool)])
 
-    # Compute ball travel time to each grid point
-    ball_travel_time = compute_ball_travel_time(ball_position, grid, params.ball_speed)
-
     # Compute time to intercept for all players at all grid points
     time_to_intercept = compute_time_to_intercept(
         all_positions,
@@ -500,6 +551,21 @@ def compute_pitch_control(
         params.reaction_time,
         params.max_speed,
     )
+
+    # Compute ball travel time to each grid point
+    if use_ball_trajectory:
+        # Find minimum attacker arrival time at each grid point (for matching)
+        att_tti = time_to_intercept[:n_att][att_onside]  # Only onside attackers
+        if len(att_tti) > 0:
+            min_att_arrival = np.min(att_tti, axis=0)
+        else:
+            min_att_arrival = np.full(grid.shape[:2], np.inf)
+
+        ball_travel_time = compute_ball_travel_time_with_trajectory(
+            ball_position, grid, min_att_arrival, ball_flight_model
+        )
+    else:
+        ball_travel_time = compute_ball_travel_time(ball_position, grid, params.ball_speed)
 
     # Run the integration
     team_control, filtered_player_control = _integrate_pitch_control(

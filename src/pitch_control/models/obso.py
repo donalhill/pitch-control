@@ -133,6 +133,8 @@ def compute_obso_for_frame(
     epv_y: np.ndarray | None = None,
     grid: np.ndarray | None = None,
     attacking_direction: int = 1,
+    use_ball_trajectory: bool = True,
+    ball_flight_model=None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Compute full OBSO analysis for a single frame.
@@ -150,6 +152,8 @@ def compute_obso_for_frame(
         epv_x, epv_y: EPV coordinate arrays
         grid: Pre-computed pitch grid (creates one if None)
         attacking_direction: +1 if attacking right (home), -1 if attacking left (away)
+        use_ball_trajectory: If True, use realistic ball trajectory model
+        ball_flight_model: Pre-loaded BallFlightModel (lazy loads if None)
 
     Returns:
         Tuple of:
@@ -172,6 +176,8 @@ def compute_obso_for_frame(
         params,
         grid=grid,
         attack_direction=attacking_direction,
+        use_ball_trajectory=use_ball_trajectory,
+        ball_flight_model=ball_flight_model,
     )
 
     # Create EPV array matching our grid (flip if attacking left)
@@ -199,6 +205,7 @@ class OBSOAnalyzer:
         self,
         params: PitchControlParams | None = None,
         epv_filepath: str | None = None,
+        use_ball_trajectory: bool = True,
     ):
         """
         Initialize the analyzer.
@@ -206,10 +213,14 @@ class OBSOAnalyzer:
         Args:
             params: Model parameters (uses defaults if None)
             epv_filepath: Path to EPV grid (uses default if None)
+            use_ball_trajectory: If True, use realistic ball trajectory model
+                with aerodynamic drag (Asai & Seo 2013) and matched flight times
+                (Spearman 2018). If False, use simple constant speed model.
         """
         from pitch_control.models.pitch_control import default_model_params
 
         self.params = params or default_model_params()
+        self.use_ball_trajectory = use_ball_trajectory
 
         # Load EPV
         self.epv_grid, self.epv_x, self.epv_y = load_epv_grid(epv_filepath)
@@ -226,6 +237,12 @@ class OBSOAnalyzer:
         self.epv_for_away = create_epv_for_grid(
             self.grid, self.epv_grid, self.epv_x, self.epv_y, attacking_direction=-1
         )
+
+        # Pre-load ball flight model if using trajectory
+        self.ball_flight_model = None
+        if use_ball_trajectory:
+            from pitch_control.models.ball_trajectory import get_ball_flight_model
+            self.ball_flight_model = get_ball_flight_model()
 
     def analyze_frame(
         self,
@@ -266,6 +283,8 @@ class OBSOAnalyzer:
             self.params,
             grid=self.grid,
             attack_direction=attack_direction,
+            use_ball_trajectory=self.use_ball_trajectory,
+            ball_flight_model=self.ball_flight_model,
         )
 
         # Select EPV based on attacking team direction
