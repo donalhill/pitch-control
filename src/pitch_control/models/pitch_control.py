@@ -481,7 +481,7 @@ def compute_pitch_control(
     grid: np.ndarray | None = None,
     check_offsides: bool = True,
     attack_direction: int = 1,
-    ball_model: str = "parabolic",
+    ball_model: str = "simple",
     use_ball_trajectory: bool = False,  # Deprecated, use ball_model instead
     ball_flight_model=None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -500,9 +500,8 @@ def compute_pitch_control(
         grid: Pre-computed grid (or None to create one)
         check_offsides: Whether to exclude offside players
         attack_direction: +1 if attacking right, -1 if attacking left
-        ball_model: Ball flight model - "simple" (constant 15 m/s), "parabolic"
-            (projectile motion, matches to attacker arrival), or "trajectory"
-            (full drag model). Default is "parabolic".
+        ball_model: Ball flight model - "simple" (constant 15 m/s, default),
+            "parabolic" (inverse kinematics), or "trajectory" (drag lookup).
         use_ball_trajectory: Deprecated, use ball_model="trajectory" instead
         ball_flight_model: Pre-loaded BallFlightModel for trajectory model
 

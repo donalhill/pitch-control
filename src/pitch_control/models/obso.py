@@ -133,7 +133,7 @@ def compute_obso_for_frame(
     epv_y: np.ndarray | None = None,
     grid: np.ndarray | None = None,
     attacking_direction: int = 1,
-    ball_model: str = "parabolic",
+    ball_model: str = "simple",
     ball_flight_model=None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
@@ -205,7 +205,7 @@ class OBSOAnalyzer:
         self,
         params: PitchControlParams | None = None,
         epv_filepath: str | None = None,
-        ball_model: str = "parabolic",
+        ball_model: str = "simple",
     ):
         """
         Initialize the analyzer.
