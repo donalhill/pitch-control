@@ -541,15 +541,25 @@ def compute_ball_travel_time_parabolic(
     v_max: float = 35.0,
 ) -> np.ndarray:
     """
-    Compute ball travel time using parabolic trajectory model.
+    Compute ball travel time using inverse kinematics approach.
 
-    Vectorized for efficiency over the grid.
+    For each grid point, solves: what trajectory makes the ball arrive
+    when the attacker does? If achievable, ball_time = attacker_time.
+    If not (requires v > v_max), uses closest achievable time.
+
+    Physics (parabolic trajectory, no drag):
+        Given distance D and desired flight time T:
+        - Required angle: θ = arctan(gT²/2D)
+        - Required speed: v₀ = √[(gT/2)² + (D/T)²]
+
+        If v₀ ≤ v_max: trajectory is achievable
+        If v₀ > v_max: use closest achievable time with v_max
 
     Args:
         ball_position: Current ball position (2,)
         target_positions: Grid of target positions (n_grid_y, n_grid_x, 2)
-        attacker_arrival_times: Fastest attacker arrival at each point (n_grid_y, n_grid_x)
-        v_max: Maximum ball speed
+        attacker_arrival_times: Fastest attacker arrival at each point
+        v_max: Maximum ball speed (m/s)
 
     Returns:
         Ball travel times (n_grid_y, n_grid_x)
@@ -559,43 +569,55 @@ def compute_ball_travel_time_parabolic(
 
     # Distances from ball to each grid point
     diff = target_positions - ball_position
-    distances = np.sqrt(np.sum(diff**2, axis=-1))
+    D = np.sqrt(np.sum(diff**2, axis=-1))
+    T = attacker_arrival_times
 
-    n_grid_y, n_grid_x = distances.shape
-    ball_times = np.zeros_like(distances)
+    # Avoid division by zero
+    D_safe = np.maximum(D, 0.01)
+    T_safe = np.maximum(T, 0.01)
 
-    # Vectorized computation
-    # Minimum speed required at each distance
-    v_min_required = np.sqrt(distances * G)
+    # Required velocity to match attacker arrival: v₀ = √[(gT/2)² + (D/T)²]
+    v_required = np.sqrt((G * T_safe / 2)**2 + (D_safe / T_safe)**2)
 
-    # Check reachability
-    reachable = v_min_required <= v_max
+    # Check if achievable
+    achievable = v_required <= v_max
 
-    # For reachable points, compute flight time range
-    # sin(2θ_min) = D*g/v_max² (clamped to 1)
-    sin_2theta = np.clip(distances * G / v_max**2, 0, 1)
+    # For achievable trajectories, ball arrives when attacker does
+    ball_times = T.copy()
 
-    # θ_low = 0.5 * arcsin(sin_2theta)
-    theta_low = 0.5 * np.arcsin(sin_2theta)
-    theta_low = np.maximum(theta_low, np.radians(5))  # Min 5°
+    # For non-achievable, compute closest time using v_max
+    # The achievable time range with v_max:
+    # - Min time: lowest angle that reaches D with v_max (driven pass)
+    # - Max time: highest angle that reaches D with v_max (lob)
 
-    theta_high = np.pi/2 - 0.5 * np.arcsin(sin_2theta)
-    theta_high = np.minimum(theta_high, np.radians(70))  # Max 70°
+    # First check if distance is reachable at all (v_min = √(Dg) at 45°)
+    v_min_for_distance = np.sqrt(D_safe * G)
+    distance_reachable = v_min_for_distance <= v_max
 
-    # Flight times: T = sqrt(2D tan(θ) / g)
-    # Avoid division by zero for zero distance
-    safe_distances = np.maximum(distances, 0.01)
+    # sin(2θ) = Dg/v_max² gives valid angle range
+    sin_2theta = np.clip(D_safe * G / v_max**2, 0, 1)
+    theta_low = 0.5 * np.arcsin(sin_2theta)  # Low angle (driven)
+    theta_high = np.pi/2 - theta_low          # High angle (lob)
 
-    t_min = np.sqrt(2 * safe_distances * np.tan(theta_low) / G)
-    t_max = np.sqrt(2 * safe_distances * np.tan(theta_high) / G)
+    # Clamp to practical angles
+    theta_low = np.maximum(theta_low, np.radians(5))
+    theta_high = np.minimum(theta_high, np.radians(75))
 
-    # Match to attacker arrival (clamp to valid range)
-    ball_times = np.clip(attacker_arrival_times, t_min, t_max)
+    # Flight times at boundary angles: T = √(2D tan(θ) / g)
+    t_min = np.sqrt(2 * D_safe * np.tan(theta_low) / G)
+    t_max = np.sqrt(2 * D_safe * np.tan(theta_high) / G)
 
-    # For unreachable points, use a large time
-    ball_times = np.where(reachable, ball_times, attacker_arrival_times * 2)
+    # For non-achievable: use closest boundary (min if T too short, max if T too long)
+    too_fast = T < t_min  # Attacker arrives before fastest possible ball
+    too_slow = T > t_max  # Attacker arrives after slowest possible ball
+
+    ball_times = np.where(~achievable & too_fast, t_min, ball_times)
+    ball_times = np.where(~achievable & too_slow, t_max, ball_times)
+
+    # For unreachable distances, use large time (defenders will dominate)
+    ball_times = np.where(~distance_reachable, T * 2, ball_times)
 
     # Zero distance = zero time
-    ball_times = np.where(distances < 0.01, 0, ball_times)
+    ball_times = np.where(D < 0.01, 0, ball_times)
 
     return ball_times
