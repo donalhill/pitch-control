@@ -171,6 +171,7 @@ def compute_obso_for_frame(
         ball_position,
         params,
         grid=grid,
+        attack_direction=attacking_direction,
     )
 
     # Create EPV array matching our grid (flip if attacking left)
@@ -249,9 +250,11 @@ class OBSOAnalyzer:
         if attacking_team == "home":
             att_data = frame_data["home"]
             def_data = frame_data["away"]
+            attack_direction = 1  # Home attacks right (positive x)
         else:
             att_data = frame_data["away"]
             def_data = frame_data["home"]
+            attack_direction = -1  # Away attacks left (negative x)
 
         # Compute pitch control
         pitch_control, _, player_control = compute_pitch_control(
@@ -262,6 +265,7 @@ class OBSOAnalyzer:
             frame_data["ball"],
             self.params,
             grid=self.grid,
+            attack_direction=attack_direction,
         )
 
         # Select EPV based on attacking team direction
