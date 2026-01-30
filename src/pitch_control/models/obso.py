@@ -133,7 +133,7 @@ def compute_obso_for_frame(
     epv_y: np.ndarray | None = None,
     grid: np.ndarray | None = None,
     attacking_direction: int = 1,
-    use_ball_trajectory: bool = True,
+    use_ball_trajectory: bool = False,  # Disabled pending investigation
     ball_flight_model=None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
@@ -152,7 +152,7 @@ def compute_obso_for_frame(
         epv_x, epv_y: EPV coordinate arrays
         grid: Pre-computed pitch grid (creates one if None)
         attacking_direction: +1 if attacking right (home), -1 if attacking left (away)
-        use_ball_trajectory: If True, use realistic ball trajectory model
+        use_ball_trajectory: If True, use realistic ball trajectory model (experimental)
         ball_flight_model: Pre-loaded BallFlightModel (lazy loads if None)
 
     Returns:
@@ -205,7 +205,7 @@ class OBSOAnalyzer:
         self,
         params: PitchControlParams | None = None,
         epv_filepath: str | None = None,
-        use_ball_trajectory: bool = True,
+        use_ball_trajectory: bool = False,  # Disabled pending investigation
     ):
         """
         Initialize the analyzer.
