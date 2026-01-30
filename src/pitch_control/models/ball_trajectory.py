@@ -435,3 +435,167 @@ def ball_flight_time(
         return model.get_matched_flight_time(distance, attacker_arrival)
     else:
         return model.get_simple_flight_time(distance)
+
+
+# =============================================================================
+# Parabolic (no drag) ball flight model
+# =============================================================================
+
+G = 9.81  # Gravity (m/s²)
+
+
+def parabolic_flight_time_range(
+    distance: float,
+    v_max: float = 35.0,
+    theta_min: float = 5.0,
+    theta_max: float = 70.0,
+) -> tuple[float, float] | None:
+    """
+    Compute min/max flight time for parabolic trajectory (no drag).
+
+    Physics:
+        Range: D = v₀² sin(2θ) / g
+        Flight time: T = √(2D tan(θ) / g)
+
+    Args:
+        distance: Horizontal distance in meters
+        v_max: Maximum ball speed in m/s
+        theta_min: Minimum launch angle in degrees
+        theta_max: Maximum launch angle in degrees
+
+    Returns:
+        (min_time, max_time) tuple, or None if unreachable
+    """
+    if distance <= 0:
+        return 0.0, 0.0
+
+    # Convert angles to radians
+    theta_min_rad = np.radians(theta_min)
+    theta_max_rad = np.radians(theta_max)
+
+    # Minimum speed required to reach distance (at 45°)
+    v_min_required = np.sqrt(distance * G)
+
+    if v_min_required > v_max:
+        return None  # Unreachable
+
+    # Valid angle range: sin(2θ) ≥ D*g/v_max²
+    sin_2theta_min = min(1.0, distance * G / v_max**2)
+
+    # Angles where we can reach with v_max
+    # sin(2θ) = sin_2theta_min has two solutions: θ_low and 90° - θ_low
+    theta_low = 0.5 * np.arcsin(sin_2theta_min)
+    theta_high = np.pi/2 - theta_low
+
+    # Clamp to allowed angle range
+    theta_low = max(theta_low, theta_min_rad)
+    theta_high = min(theta_high, theta_max_rad)
+
+    if theta_low > theta_high:
+        # No valid angles in our range
+        return None
+
+    # Flight time: T = √(2D tan(θ) / g)
+    # Minimum time at lowest angle (driven pass)
+    # Maximum time at highest angle (lobbed pass)
+    t_min = np.sqrt(2 * distance * np.tan(theta_low) / G)
+    t_max = np.sqrt(2 * distance * np.tan(theta_high) / G)
+
+    return t_min, t_max
+
+
+def parabolic_matched_flight_time(
+    distance: float,
+    attacker_arrival: float,
+    v_max: float = 35.0,
+) -> float:
+    """
+    Get ball flight time matched to attacker arrival (parabolic model).
+
+    Following Spearman: select trajectory where ball arrives when attacker arrives.
+
+    Args:
+        distance: Distance to target in meters
+        attacker_arrival: Time for attacker to reach target
+        v_max: Maximum ball speed
+
+    Returns:
+        Ball flight time in seconds
+    """
+    result = parabolic_flight_time_range(distance, v_max)
+
+    if result is None:
+        # Unreachable - return large time
+        return attacker_arrival * 2
+
+    t_min, t_max = result
+
+    # Clamp to valid range (match to attacker arrival)
+    return np.clip(attacker_arrival, t_min, t_max)
+
+
+def compute_ball_travel_time_parabolic(
+    ball_position: np.ndarray,
+    target_positions: np.ndarray,
+    attacker_arrival_times: np.ndarray,
+    v_max: float = 35.0,
+) -> np.ndarray:
+    """
+    Compute ball travel time using parabolic trajectory model.
+
+    Vectorized for efficiency over the grid.
+
+    Args:
+        ball_position: Current ball position (2,)
+        target_positions: Grid of target positions (n_grid_y, n_grid_x, 2)
+        attacker_arrival_times: Fastest attacker arrival at each point (n_grid_y, n_grid_x)
+        v_max: Maximum ball speed
+
+    Returns:
+        Ball travel times (n_grid_y, n_grid_x)
+    """
+    if np.isnan(ball_position).any():
+        return np.zeros(target_positions.shape[:2])
+
+    # Distances from ball to each grid point
+    diff = target_positions - ball_position
+    distances = np.sqrt(np.sum(diff**2, axis=-1))
+
+    n_grid_y, n_grid_x = distances.shape
+    ball_times = np.zeros_like(distances)
+
+    # Vectorized computation
+    # Minimum speed required at each distance
+    v_min_required = np.sqrt(distances * G)
+
+    # Check reachability
+    reachable = v_min_required <= v_max
+
+    # For reachable points, compute flight time range
+    # sin(2θ_min) = D*g/v_max² (clamped to 1)
+    sin_2theta = np.clip(distances * G / v_max**2, 0, 1)
+
+    # θ_low = 0.5 * arcsin(sin_2theta)
+    theta_low = 0.5 * np.arcsin(sin_2theta)
+    theta_low = np.maximum(theta_low, np.radians(5))  # Min 5°
+
+    theta_high = np.pi/2 - 0.5 * np.arcsin(sin_2theta)
+    theta_high = np.minimum(theta_high, np.radians(70))  # Max 70°
+
+    # Flight times: T = sqrt(2D tan(θ) / g)
+    # Avoid division by zero for zero distance
+    safe_distances = np.maximum(distances, 0.01)
+
+    t_min = np.sqrt(2 * safe_distances * np.tan(theta_low) / G)
+    t_max = np.sqrt(2 * safe_distances * np.tan(theta_high) / G)
+
+    # Match to attacker arrival (clamp to valid range)
+    ball_times = np.clip(attacker_arrival_times, t_min, t_max)
+
+    # For unreachable points, use a large time
+    ball_times = np.where(reachable, ball_times, attacker_arrival_times * 2)
+
+    # Zero distance = zero time
+    ball_times = np.where(distances < 0.01, 0, ball_times)
+
+    return ball_times

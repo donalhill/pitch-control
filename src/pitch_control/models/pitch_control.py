@@ -175,7 +175,7 @@ def compute_ball_travel_time_with_trajectory(
     ball_flight_model=None,
 ) -> np.ndarray:
     """
-    Compute ball travel time using realistic trajectory model.
+    Compute ball travel time using realistic trajectory model with drag.
 
     Following Spearman's approach: select the ball trajectory where flight time
     most closely matches the nearest attacker's arrival time.
@@ -212,6 +212,29 @@ def compute_ball_travel_time_with_trajectory(
             ball_times[iy, ix] = ball_flight_model.get_matched_flight_time(dist, att_time)
 
     return ball_times
+
+
+def compute_ball_travel_time_parabolic(
+    ball_position: np.ndarray,  # (2,)
+    target_positions: np.ndarray,  # (n_grid_y, n_grid_x, 2)
+    attacker_arrival_times: np.ndarray,  # (n_grid_y, n_grid_x) - min attacker time
+) -> np.ndarray:
+    """
+    Compute ball travel time using parabolic trajectory (no drag).
+
+    Following Spearman's approach with simplified physics.
+    Fully vectorized, no lookup table, smooth results.
+
+    Args:
+        ball_position: Current ball position (2,)
+        target_positions: Grid of target positions (n_grid_y, n_grid_x, 2)
+        attacker_arrival_times: Fastest attacker arrival at each grid point
+
+    Returns:
+        Array of shape (n_grid_y, n_grid_x) with travel times in seconds
+    """
+    from pitch_control.models.ball_trajectory import compute_ball_travel_time_parabolic as _compute
+    return _compute(ball_position, target_positions, attacker_arrival_times)
 
 
 def compute_time_to_intercept(
@@ -458,7 +481,8 @@ def compute_pitch_control(
     grid: np.ndarray | None = None,
     check_offsides: bool = True,
     attack_direction: int = 1,
-    use_ball_trajectory: bool = False,
+    ball_model: str = "parabolic",
+    use_ball_trajectory: bool = False,  # Deprecated, use ball_model instead
     ball_flight_model=None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
@@ -476,10 +500,11 @@ def compute_pitch_control(
         grid: Pre-computed grid (or None to create one)
         check_offsides: Whether to exclude offside players
         attack_direction: +1 if attacking right, -1 if attacking left
-        use_ball_trajectory: If True, use realistic ball trajectory model with
-            aerodynamic drag (Asai & Seo 2013) and match flight time to attacker
-            arrival (Spearman 2018). If False, use simple constant speed model.
-        ball_flight_model: Pre-loaded BallFlightModel (lazy loads if None)
+        ball_model: Ball flight model - "simple" (constant 15 m/s), "parabolic"
+            (projectile motion, matches to attacker arrival), or "trajectory"
+            (full drag model). Default is "parabolic".
+        use_ball_trajectory: Deprecated, use ball_model="trajectory" instead
+        ball_flight_model: Pre-loaded BallFlightModel for trajectory model
 
     Returns:
         Tuple of:
@@ -487,6 +512,9 @@ def compute_pitch_control(
         - grid: (n_grid_y, n_grid_x, 2) - grid coordinates used
         - player_control: (n_players, n_grid_y, n_grid_x) - per-player control
     """
+    # Handle deprecated parameter
+    if use_ball_trajectory:
+        ball_model = "trajectory"
     if params is None:
         params = default_model_params()
 
@@ -553,7 +581,7 @@ def compute_pitch_control(
     )
 
     # Compute ball travel time to each grid point
-    if use_ball_trajectory:
+    if ball_model in ("parabolic", "trajectory"):
         # Find minimum attacker arrival time at each grid point (for matching)
         att_tti = time_to_intercept[:n_att][att_onside]  # Only onside attackers
         if len(att_tti) > 0:
@@ -561,10 +589,15 @@ def compute_pitch_control(
         else:
             min_att_arrival = np.full(grid.shape[:2], np.inf)
 
-        ball_travel_time = compute_ball_travel_time_with_trajectory(
-            ball_position, grid, min_att_arrival, ball_flight_model
-        )
-    else:
+        if ball_model == "parabolic":
+            ball_travel_time = compute_ball_travel_time_parabolic(
+                ball_position, grid, min_att_arrival
+            )
+        else:  # trajectory
+            ball_travel_time = compute_ball_travel_time_with_trajectory(
+                ball_position, grid, min_att_arrival, ball_flight_model
+            )
+    else:  # simple
         ball_travel_time = compute_ball_travel_time(ball_position, grid, params.ball_speed)
 
     # Run the integration
