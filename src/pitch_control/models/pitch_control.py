@@ -29,6 +29,29 @@ import numba
 import numpy as np
 
 
+def soft_min(arr: np.ndarray, axis: int = 0, tau: float = 0.4) -> np.ndarray:
+    """
+    Compute soft minimum along an axis using log-sum-exp.
+
+    Smoothly approximates np.min without discontinuities when the
+    minimum-achieving element changes.
+
+    Args:
+        arr: Input array
+        axis: Axis along which to compute soft min
+        tau: Temperature parameter (smaller = closer to hard min)
+
+    Returns:
+        Soft minimum values
+    """
+    # soft_min(x) = -tau * log(sum(exp(-x/tau)))
+    # Use logsumexp trick for numerical stability
+    arr_scaled = -arr / tau
+    max_val = np.max(arr_scaled, axis=axis, keepdims=True)
+    exp_sum = np.sum(np.exp(arr_scaled - max_val), axis=axis)
+    return -tau * (np.log(exp_sum) + np.squeeze(max_val, axis=axis))
+
+
 @dataclass
 class PitchControlParams:
     """
@@ -481,7 +504,7 @@ def compute_pitch_control(
     grid: np.ndarray | None = None,
     check_offsides: bool = True,
     attack_direction: int = 1,
-    ball_model: str = "simple",
+    ball_model: str = "parabolic",
     use_ball_trajectory: bool = False,  # Deprecated, use ball_model instead
     ball_flight_model=None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -582,9 +605,10 @@ def compute_pitch_control(
     # Compute ball travel time to each grid point
     if ball_model in ("parabolic", "trajectory"):
         # Find minimum attacker arrival time at each grid point (for matching)
+        # Use soft-min to avoid discontinuities when nearest attacker changes
         att_tti = time_to_intercept[:n_att][att_onside]  # Only onside attackers
         if len(att_tti) > 0:
-            min_att_arrival = np.min(att_tti, axis=0)
+            min_att_arrival = soft_min(att_tti, axis=0, tau=0.4)
         else:
             min_att_arrival = np.full(grid.shape[:2], np.inf)
 
